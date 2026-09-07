@@ -11,16 +11,14 @@ class StudyPackWorkflow:
     def __init__(self, api_key: str):
         if not api_key:
             raise ValueError("Groq API Key is missing.")
-        # Initialize the official Groq client
         self.client = Groq(api_key=api_key)
 
     @retry(
         reraise=True,
-        stop=stop_after_attempt(4),
-        wait=wait_exponential(multiplier=2, min=2, max=10)
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=8)
     )
     def _call_llm_with_retry(self, system_prompt: str, user_prompt: str, model_name: str) -> dict:
-        # Request completion via Groq API
         response = self.client.chat.completions.create(
             model=model_name,
             messages=[
@@ -33,17 +31,18 @@ class StudyPackWorkflow:
         return json.loads(content)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method using Groq fast models with automatic fallback."""
+        """Utility method using verified active Groq models."""
         primary_model = "llama-3.3-70b-versatile"
         fallback_model = "llama-3.1-8b-instant"
 
         try:
             return self._call_llm_with_retry(system_prompt, user_prompt, primary_model)
         except Exception as e:
-            error_msg = str(e)
-            if "429" in error_msg or "503" in error_msg or "rate_limit" in error_msg:
+            # Automatic fallback to 8B instant model if primary fails
+            try:
                 return self._call_llm_with_retry(system_prompt, user_prompt, fallback_model)
-            raise e
+            except Exception:
+                raise e
 
     def execute_pipeline(self, topic: str, depth: str, style: str, progress_callback=None):
         """Executes the 5-stage agentic workflow."""
