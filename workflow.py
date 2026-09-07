@@ -1,5 +1,5 @@
 """
-workflow.py - Orchestration Layer for Multi-Stage AI Pipeline using Groq
+workflow.py - Groq API Orchestration Layer
 """
 
 import json
@@ -11,6 +11,7 @@ class StudyPackWorkflow:
     def __init__(self, api_key: str):
         if not api_key:
             raise ValueError("Groq API Key is missing.")
+        # Initialize the official Groq client
         self.client = Groq(api_key=api_key)
 
     @retry(
@@ -19,6 +20,7 @@ class StudyPackWorkflow:
         wait=wait_exponential(multiplier=2, min=2, max=10)
     )
     def _call_llm_with_retry(self, system_prompt: str, user_prompt: str, model_name: str) -> dict:
+        # Request completion via Groq API
         response = self.client.chat.completions.create(
             model=model_name,
             messages=[
@@ -31,7 +33,7 @@ class StudyPackWorkflow:
         return json.loads(content)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method using Groq's high-speed models with automatic fallback."""
+        """Utility method using Groq fast models with automatic fallback."""
         primary_model = "llama-3.3-70b-versatile"
         fallback_model = "llama-3.1-8b-instant"
 
