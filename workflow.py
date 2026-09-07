@@ -14,7 +14,7 @@ class StudyPackWorkflow:
             raise ValueError("Google API Key is missing.")
         self.client = genai.Client(api_key=api_key)
 
-    # Automatically retry on temporary 503 errors (wait 2s, 4s, 8s, 10s)
+    # Automatically retry up to 4 times with exponential backoff on 503 high-demand errors
     @retry(
         reraise=True,
         stop=stop_after_attempt(4),
@@ -32,25 +32,23 @@ class StudyPackWorkflow:
         return json.loads(response.text)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method with automatic fallback if primary model is unavailable."""
-        # Try primary model first
+        """Utility method with valid active fallback model."""
+        # Primary choice: latest active model
+        primary_model = "gemini-3.6-flash"
+        # Fallback choice: active high-throughput lightweight model
+        fallback_model = "gemini-3.5-flash-lite"
+
         try:
-            return self._call_llm_with_retry(system_prompt, user_prompt, "gemini-3.6-flash")
+            return self._call_llm_with_retry(system_prompt, user_prompt, primary_model)
         except Exception as e:
-            # Fallback model if gemini-3.6-flash continues to throw 503 high-demand errors
-            if "503" in str(e) or "UNAVAILABLE" in str(e):
-                return self._call_llm_with_retry(system_prompt, user_prompt, "gemini-2.5-flash")
+            error_msg = str(e)
+            # Fallback if primary model hits temporary server capacity limits
+            if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                return self._call_llm_with_retry(system_prompt, user_prompt, fallback_model)
             raise e
 
     def execute_pipeline(self, topic: str, depth: str, style: str, progress_callback=None):
-        """
-        Executes the 5-stage agentic workflow:
-        Stage 1: Planning
-        Stage 2: Content Generation
-        Stage 3: Assessment
-        Stage 4: Review / QA Audit
-        Stage 5: Refinement
-        """
+        """Executes the 5-stage agentic workflow."""
         # Stage 1: Planning
         if progress_callback:
             progress_callback(10, "⚡ [Stage 1/5] Architectural Planning & Learning Plan Generation...")
