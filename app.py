@@ -1,32 +1,26 @@
 """
-app.py - Main Streamlit User Interface & Event Handler
+app.py - Main Streamlit UI configured for Groq API
 """
 
 import os
 import streamlit as st
 from workflow import StudyPackWorkflow
 
-# ------------------------------------------------------------------------------
-# 1. Page Configuration
-# ------------------------------------------------------------------------------
 st.set_page_config(
     page_title="Multi-Stage AI Study Pack Generator",
     page_icon="🧠",
     layout="wide"
 )
 
-# ------------------------------------------------------------------------------
-# 2. Sidebar & API Setup
-# ------------------------------------------------------------------------------
 st.sidebar.title("🛠️ Configuration")
 
-# API Key Handling (Streamlit Secrets or Manual Input)
-api_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+# API Key Handling for Groq
+api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
 
 if not api_key:
-    api_key = st.sidebar.text_input("Enter OpenAI API Key:", type="password")
+    api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
     if not api_key:
-        st.sidebar.warning("⚠️ Please provide an API key to proceed.")
+        st.sidebar.warning("⚠️ Please enter a Groq API Key to proceed.")
 
 st.sidebar.subheader("Inputs")
 topic_in = st.sidebar.text_input("Topic / Subject:", placeholder="e.g., Quantum Computing")
@@ -35,21 +29,15 @@ style_in = st.sidebar.selectbox("Learning Style:", ["Conceptual & Theoretical", 
 
 run_btn = st.sidebar.button("🚀 Run Workflow Pipeline", type="primary")
 
-# ------------------------------------------------------------------------------
-# 3. Session State Initialization
-# ------------------------------------------------------------------------------
 if "results" not in st.session_state:
     st.session_state.results = None
 
-# ------------------------------------------------------------------------------
-# 4. Main UI & Pipeline Execution
-# ------------------------------------------------------------------------------
 st.title("🧠 Multi-Stage AI Study Pack Generator")
-st.caption("Powered by a 5-Stage Orchestrated Agentic Pipeline: Plan ➔ Content ➔ Assessment ➔ Audit ➔ Refine")
+st.caption("Powered by Groq Llama 3.3 & a 5-Stage Orchestrated Agentic Pipeline")
 
 if run_btn:
     if not api_key:
-        st.error("Please enter a valid OpenAI API Key in the sidebar.")
+        st.error("Please enter a valid Groq API Key in the sidebar.")
     elif not topic_in.strip():
         st.warning("Please enter a topic to generate study materials.")
     else:
@@ -78,9 +66,7 @@ if run_btn:
             progress_bar.empty()
             st.error(f"❌ Pipeline Execution Error: {str(e)}")
 
-# ------------------------------------------------------------------------------
-# 5. Output Display
-# ------------------------------------------------------------------------------
+# Display Logic
 if st.session_state.results:
     res = st.session_state.results
     plan = res.get("plan", {})
@@ -89,7 +75,6 @@ if st.session_state.results:
 
     st.divider()
 
-    # QA Audit Metadata Block
     with st.expander("📊 View Stage 4 Quality Control & Audit Report", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
@@ -102,7 +87,6 @@ if st.session_state.results:
         st.write("**Improvement Directives Applied in Stage 5 Refinement:**")
         st.json(review.get("improvement_instructions", {}))
 
-    # Main Output Tabs
     tab_plan, tab_summary, tab_takeaways, tab_cards, tab_quiz = st.tabs([
         "📋 Curriculum Plan", 
         "📖 Summary", 
