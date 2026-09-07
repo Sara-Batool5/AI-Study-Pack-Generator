@@ -31,18 +31,16 @@ class StudyPackWorkflow:
         return json.loads(content)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method using verified active Groq models."""
-        primary_model = "llama-3.3-70b-versatile"
-        fallback_model = "llama-3.1-8b-instant"
+        """Utility method using universally available Groq free-tier models."""
+        # Active models available across all Groq key tiers
+        primary_model = "llama-3.1-8b-instant"
+        fallback_model = "llama3-70b-8192"
 
         try:
             return self._call_llm_with_retry(system_prompt, user_prompt, primary_model)
-        except Exception as e:
-            # Automatic fallback to 8B instant model if primary fails
-            try:
-                return self._call_llm_with_retry(system_prompt, user_prompt, fallback_model)
-            except Exception:
-                raise e
+        except Exception:
+            # Fallback if primary model encounters rate limits or temporary downtime
+            return self._call_llm_with_retry(system_prompt, user_prompt, fallback_model)
 
     def execute_pipeline(self, topic: str, depth: str, style: str, progress_callback=None):
         """Executes the 5-stage agentic workflow."""
