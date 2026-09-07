@@ -5,6 +5,7 @@ workflow.py - Orchestration Layer for Multi-Stage AI Pipeline
 import json
 from google import genai
 from google.genai import types
+from tenacity import retry, stop_after_attempt, wait_exponential
 import prompts
 
 class StudyPackWorkflow:
@@ -13,20 +14,33 @@ class StudyPackWorkflow:
             raise ValueError("Google API Key is missing.")
         self.client = genai.Client(api_key=api_key)
 
-    def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method to handle Google Gemini API calls with JSON mode."""
+    # Automatically retry on temporary 503 errors (wait 2s, 4s, 8s, 10s)
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(4),
+        wait=wait_exponential(multiplier=2, min=2, max=10)
+    )
+    def _call_llm_with_retry(self, system_prompt: str, user_prompt: str, model_name: str) -> dict:
         response = self.client.models.generate_content(
-            model="gemini-3.6-flash",
+            model=model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 response_mime_type="application/json"
             )
         )
+        return json.loads(response.text)
+
+    def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
+        """Utility method with automatic fallback if primary model is unavailable."""
+        # Try primary model first
         try:
-            return json.loads(response.text)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse LLM JSON response: {e}")
+            return self._call_llm_with_retry(system_prompt, user_prompt, "gemini-3.6-flash")
+        except Exception as e:
+            # Fallback model if gemini-3.6-flash continues to throw 503 high-demand errors
+            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                return self._call_llm_with_retry(system_prompt, user_prompt, "gemini-2.5-flash")
+            raise e
 
     def execute_pipeline(self, topic: str, depth: str, style: str, progress_callback=None):
         """
