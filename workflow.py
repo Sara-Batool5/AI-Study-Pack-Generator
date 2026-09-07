@@ -3,28 +3,28 @@ workflow.py - Orchestration Layer for Multi-Stage AI Pipeline
 """
 
 import json
-from openai import OpenAI
+from google import genai
+from google.genai import types
 import prompts
 
 class StudyPackWorkflow:
     def __init__(self, api_key: str):
         if not api_key:
-            raise ValueError("OpenAI API Key is missing.")
-        self.client = OpenAI(api_key=api_key)
+            raise ValueError("Google API Key is missing.")
+        self.client = genai.Client(api_key=api_key)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method to handle OpenAI API calls with JSON mode."""
-        response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            response_format={"type": "json_object"}
+        """Utility method to handle Google Gemini API calls with JSON mode."""
+        response = self.client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json"
+            )
         )
-        content = response.choices[0].message.content
         try:
-            return json.loads(content)
+            return json.loads(response.text)
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse LLM JSON response: {e}")
 
