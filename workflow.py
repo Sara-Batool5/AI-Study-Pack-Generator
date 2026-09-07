@@ -1,49 +1,45 @@
 """
-workflow.py - Orchestration Layer for Multi-Stage AI Pipeline
+workflow.py - Orchestration Layer for Multi-Stage AI Pipeline using Groq
 """
 
 import json
-from google import genai
-from google.genai import types
+from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential
 import prompts
 
 class StudyPackWorkflow:
     def __init__(self, api_key: str):
         if not api_key:
-            raise ValueError("Google API Key is missing.")
-        self.client = genai.Client(api_key=api_key)
+            raise ValueError("Groq API Key is missing.")
+        self.client = Groq(api_key=api_key)
 
-    # Automatically retry up to 4 times with exponential backoff on 503 high-demand errors
     @retry(
         reraise=True,
         stop=stop_after_attempt(4),
         wait=wait_exponential(multiplier=2, min=2, max=10)
     )
     def _call_llm_with_retry(self, system_prompt: str, user_prompt: str, model_name: str) -> dict:
-        response = self.client.models.generate_content(
+        response = self.client.chat.completions.create(
             model=model_name,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type="application/json"
-            )
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"}
         )
-        return json.loads(response.text)
+        content = response.choices[0].message.content
+        return json.loads(content)
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
-        """Utility method with valid active fallback model."""
-        # Primary choice: latest active model
-        primary_model = "gemini-3.6-flash"
-        # Fallback choice: active high-throughput lightweight model
-        fallback_model = "gemini-3.5-flash-lite"
+        """Utility method using Groq's high-speed models with automatic fallback."""
+        primary_model = "llama-3.3-70b-versatile"
+        fallback_model = "llama-3.1-8b-instant"
 
         try:
             return self._call_llm_with_retry(system_prompt, user_prompt, primary_model)
         except Exception as e:
             error_msg = str(e)
-            # Fallback if primary model hits temporary server capacity limits
-            if "503" in error_msg or "UNAVAILABLE" in error_msg:
+            if "429" in error_msg or "503" in error_msg or "rate_limit" in error_msg:
                 return self._call_llm_with_retry(system_prompt, user_prompt, fallback_model)
             raise e
 
