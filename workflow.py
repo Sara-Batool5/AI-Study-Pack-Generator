@@ -1,0 +1,98 @@
+"""
+workflow.py - Orchestration Layer for Multi-Stage AI Pipeline
+"""
+
+import json
+from openai import OpenAI
+import prompts
+
+class StudyPackWorkflow:
+    def __init__(self, api_key: str):
+        if not api_key:
+            raise ValueError("OpenAI API Key is missing.")
+        self.client = OpenAI(api_key=api_key)
+
+    def _call_llm(self, system_prompt: str, user_prompt: str) -> dict:
+        """Utility method to handle OpenAI API calls with JSON mode."""
+        response = self.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse LLM JSON response: {e}")
+
+    def execute_pipeline(self, topic: str, depth: str, style: str, progress_callback=None):
+        """
+        Executes the 5-stage agentic workflow:
+        Stage 1: Planning
+        Stage 2: Content Generation
+        Stage 3: Assessment
+        Stage 4: Review / QA Audit
+        Stage 5: Refinement
+        """
+        # Stage 1: Planning
+        if progress_callback:
+            progress_callback(10, "⚡ [Stage 1/5] Architectural Planning & Learning Plan Generation...")
+        plan_res = self._call_llm(
+            prompts.STAGE_1_SYSTEM,
+            prompts.get_stage_1_prompt(topic, depth, style)
+        )
+
+        # Stage 2: Content Generation
+        if progress_callback:
+            progress_callback(30, "⚡ [Stage 2/5] Synthesizing Content & Flashcards...")
+        content_res = self._call_llm(
+            prompts.STAGE_2_SYSTEM,
+            prompts.get_stage_2_prompt(topic, depth, style, json.dumps(plan_res))
+        )
+
+        # Stage 3: Assessment
+        if progress_callback:
+            progress_callback(50, "⚡ [Stage 3/5] Generating Targeted Assessments & Quizzes...")
+        assessment_res = self._call_llm(
+            prompts.STAGE_3_SYSTEM,
+            prompts.get_stage_3_prompt(topic, depth, json.dumps(content_res))
+        )
+
+        # Stage 4: Review & Audit
+        if progress_callback:
+            progress_callback(75, "⚡ [Stage 4/5] Running Quality Control & Peer Review Audit...")
+        combined_materials = {
+            "plan": plan_res,
+            "content": content_res,
+            "assessment": assessment_res
+        }
+        review_res = self._call_llm(
+            prompts.STAGE_4_SYSTEM,
+            prompts.get_stage_4_prompt(json.dumps(combined_materials))
+        )
+
+        # Stage 5: Refinement
+        if progress_callback:
+            progress_callback(90, "⚡ [Stage 5/5] Refinement & Optimization Stage...")
+        draft_pack = {
+            "summary": content_res.get("summary"),
+            "key_takeaways": content_res.get("key_takeaways"),
+            "flashcards": content_res.get("flashcards"),
+            "quiz": assessment_res.get("quiz")
+        }
+        final_pack = self._call_llm(
+            prompts.STAGE_5_SYSTEM,
+            prompts.get_stage_5_prompt(json.dumps(draft_pack), json.dumps(review_res))
+        )
+
+        if progress_callback:
+            progress_callback(100, " Workflow Execution Complete!")
+
+        return {
+            "plan": plan_res,
+            "review": review_res,
+            "final_pack": final_pack
+        }
